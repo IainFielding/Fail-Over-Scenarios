@@ -139,16 +139,29 @@ class Diagram:
             f'width="{w}" height="{h}" as="geometry"/></mxCell>')
         return i
 
-    def edge(self, src, dst, label="", dashed=False, color="#333333"):
+    def edge(self, src, dst, label="", dashed=False, color="#333333",
+             waypoints=None, exit=None, entry=None):
+        """Orthogonal edge. `waypoints` is a list of (x, y) the line must pass
+        through (used to route around shapes); `exit`/`entry` are (x, y)
+        fractions (0..1) pinning where the line leaves src / meets dst."""
         i = self.nid()
         dash = 1 if dashed else 0
         style = (f"edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;"
                  f"dashed={dash};strokeColor={color};endArrow=block;"
-                 f"fontSize=10;labelBackgroundColor=#FFFFFF;")
+                 f"fontSize=10;labelBackgroundColor=#FFFFFF;jettySize=auto;")
+        if exit is not None:
+            style += f"exitX={exit[0]};exitY={exit[1]};exitDx=0;exitDy=0;"
+        if entry is not None:
+            style += f"entryX={entry[0]};entryY={entry[1]};entryDx=0;entryDy=0;"
+        geo = '<mxGeometry relative="1" as="geometry">'
+        if waypoints:
+            pts = "".join(f'<mxPoint x="{px}" y="{py}"/>' for px, py in waypoints)
+            geo += f'<Array as="points">{pts}</Array>'
+        geo += '</mxGeometry>'
         self.fg.append(
             f'<mxCell id="{i}" value="{esc(label)}" style="{style}" '
             f'edge="1" parent="1" source="{src}" target="{dst}">'
-            f'<mxGeometry relative="1" as="geometry"/></mxCell>')
+            f'{geo}</mxCell>')
         return i
 
     # ---- a full 3-tier stack; returns dict of tier node ids ----
@@ -275,8 +288,13 @@ def s4():
     d.edge(tm, a["lb"], "traffic")
     d.edge(tm, p["lb"], "failover", dashed=True, color="#888888")
     d.edge(tm, dr["lb"], "DR failover", dashed=True, color="#888888")
-    d.edge(a["db"], p["db"], "sync", dashed=True, color="#6C8EBF")
-    d.edge(a["db"], dr["db"], "async replication", dashed=True, color="#D79B00")
+    d.edge(a["db"], p["db"], "sync", dashed=True, color="#6C8EBF",
+           exit=(1, 0.5), entry=(0, 0.5))
+    # async to the DR region routes below the row so it clears the passive DB
+    db_lane = 195 + 280 + 60   # just below the stack DB icons
+    d.edge(a["db"], dr["db"], "async replication", dashed=True, color="#D79B00",
+           exit=(0.5, 1), entry=(0.5, 1),
+           waypoints=[(275, db_lane), (945, db_lane)])
     d.legend(1100, 130)
     d.save("04-active-passive-dr.drawio")
 
@@ -299,26 +317,42 @@ def az_region(d, x, label, fill, n=3, theme=None, region_fill=None):
     az_h = region_h - 70
     d.box(x, y, region_w, region_h, label, region_fill or REGION)
     agw = d.shape(x + 30, y + 80, L["agw"], t["agw"])         # zone-redundant
-    ilb = d.shape(x + 30, y + 240, L["ilb"], t["ilb"])        # zone-redundant
-    webs, apps, dbs = [], [], []
+    ilb = d.shape(x + 30, y + 160, L["ilb"], t["ilb"])        # zone-redundant
+    ilb_cx = x + 54
+    rx = x + 130              # riser column just right of the LBs (clear of AZs)
+    # Routing lanes (gaps between rows) so fan-out edges never cross icons:
+    lane_agw = az_y + 26      # just above the web row (below AZ labels)
+    lane_w2i = az_y + 114     # web -> internal LB, below the web labels / above LB top
+    lane_i2a = az_y + 160     # internal LB -> app, below the LB so the fan-out drops
+    webs, apps, dbs, web_cx = [], [], [], []
     for i in range(n):
         ax = x + 190 + i * 175
         d.box(ax, az_y, 150, az_h, f"AZ-{i+1}  (Active)", fill)
         cx = ax + 51
+        web_cx.append(cx + 24)
         webs.append(d.shape(cx, az_y + 40, L["web"], t["vm"]))
         apps.append(d.shape(cx, az_y + 180, L["app"], t["vm"]))
         dbs.append(d.shape(cx, az_y + 320, L["db"], t["db"]))
         d.edge(apps[i], dbs[i])
-    # presentation LB -> web (each AZ); web -> internal LB
-    for w in webs:
-        d.edge(agw, w)
-        d.edge(w, ilb)
-    # internal LB -> app tier, load balanced across AZs
+    # presentation LB -> web: leave from the SIDE (in arrives on top), rise into
+    # a lane above the web row, then drop into each web's top.
+    for i, w in enumerate(webs):
+        d.edge(agw, w, exit=(1, 0.5), entry=(0.5, 0),
+               waypoints=[(rx, lane_agw), (web_cx[i], lane_agw)])
+    # web -> internal LB: out the web bottom, converge on the LB top
+    for i, w in enumerate(webs):
+        d.edge(w, ilb, exit=(0.5, 1), entry=(0.5, 0),
+               waypoints=[(web_cx[i], lane_w2i), (ilb_cx, lane_w2i)])
+    # internal LB -> app tier: leave from the SIDE (in arrives on top), into a
+    # lane above the app row, then drop into each app's top.
     for i, a in enumerate(apps):
-        d.edge(ilb, a, "load balanced across AZs" if i == n // 2 else "")
+        d.edge(ilb, a, "load balanced across AZs" if i == n // 2 else "",
+               exit=(1, 0.5), entry=(0.5, 0),
+               waypoints=[(rx, lane_i2a), (web_cx[i], lane_i2a)])
     # synchronous data replication between adjacent AZ databases
     for i in range(n - 1):
-        d.edge(dbs[i], dbs[i + 1], "sync", dashed=True, color="#6C8EBF")
+        d.edge(dbs[i], dbs[i + 1], "sync", dashed=True, color="#6C8EBF",
+               exit=(1, 0.5), entry=(0, 0.5))
     return {"front": agw, "ilb": ilb, "webs": webs, "apps": apps,
             "dbs": dbs, "w": region_w, "h": region_h}
 
@@ -348,7 +382,7 @@ def s6():
     d.edge(tm, dr["front"], "DR failover", dashed=True, color="#888888")
     # async replication region1 -> DR
     d.edge(r["dbs"][2], dr["dbs"][0], "async replication",
-           dashed=True, color="#D79B00")
+           dashed=True, color="#D79B00", exit=(1, 0.5), entry=(0, 0.5))
     d.legend(100, 130 + r["h"] + 20)
     d.save("06-active-3az-dr.drawio")
 
@@ -366,8 +400,8 @@ def s7():
     d.edge(tm, r2["front"], "traffic", color="#82B366")
     # bidirectional cross-region async replication between the two data tiers
     d.edge(r1["dbs"][2], r2["dbs"][0],
-           "bidirectional async replication", dashed=True, color="#D79B00")
-    d.edge(r2["dbs"][0], r1["dbs"][2], "", dashed=True, color="#D79B00")
+           "bidirectional async replication", dashed=True, color="#D79B00",
+           exit=(1, 0.5), entry=(0, 0.5))
     d.legend(80, 130 + r1["h"] + 20)
     d.save("07-multi-region-active.drawio")
 
@@ -385,7 +419,7 @@ def s6b():
     d.edge(tm, r["front"], "traffic")
     d.edge(tm, dr["front"], "DR failover", dashed=True, color="#888888")
     d.edge(r["dbs"][2], dr["dbs"][0], "cross-cloud async replication",
-           dashed=True, color="#D79B00")
+           dashed=True, color="#D79B00", exit=(1, 0.5), entry=(0, 0.5))
     d.legend(100, 130 + r["h"] + 20)
     d.save("06b-active-3az-dr-aws.drawio")
 
@@ -404,8 +438,7 @@ def s7b():
     d.edge(tm, r2["front"], "traffic", color="#82B366")
     d.edge(r1["dbs"][2], r2["dbs"][0],
            "bidirectional async replication (cross-cloud)",
-           dashed=True, color="#D79B00")
-    d.edge(r2["dbs"][0], r1["dbs"][2], "", dashed=True, color="#D79B00")
+           dashed=True, color="#D79B00", exit=(1, 0.5), entry=(0, 0.5))
     d.legend(80, 130 + r1["h"] + 20)
     d.save("07b-active-active-azure-aws.drawio")
 
@@ -436,7 +469,7 @@ def s8():
     for i in range(len(regions) - 1):
         lbl = "global async replication (active/active)" if i == 0 else ""
         d.edge(regions[i]["dbs"][2], regions[i + 1]["dbs"][0], lbl,
-               dashed=True, color="#D79B00")
+               dashed=True, color="#D79B00", exit=(1, 0.5), entry=(0, 0.5))
     d.legend(80, 130 + regions[0]["h"] + 20)
     d.save("08-multicloud-active-active.drawio")
 
