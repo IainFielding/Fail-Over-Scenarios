@@ -333,15 +333,15 @@ scenario. **Cell-based (#8) is an overlay** you can add to any tier.
 
 | # | PaaS topology | Failover method | RTO | RPO | Target SLO | Min tier / SKU | Cost | Protects against |
 |---|---------------|-----------------|-----|-----|-----------|----------------|------|------------------|
-| 1 | Single region + PITR | Point-in-time restore | Min-hrs | Seconds (continuous backup) | ~99.9% | Any | `$` | (nothing, baseline) |
-| 2 | Local HA (multi-instance) | Managed multi-instance + local replica | Seconds | ≈ 0 | ~99.9-99.95% | Standard+ / SQL Business Critical | `$$` | Instance / hardware failure |
-| 3 | Zone-redundant | Config toggle across 3 AZ | Seconds | ≈ 0 | ~99.99% | **Premium v3** / zone-redundant DB | `$$` | Zone failure |
-| 4 | Serverless pilot light | Scale-from-zero DR + geo-replica | 1-15 min | Seconds | ~99.9% + regional | Serverless compute + geo-replica | `$$` | Region loss (cheapest) |
-| 5 | Managed failover group | Auto-promote DB + health failover | Sec-min | Seconds | ~99.95% | Azure SQL failover groups | `$$$` | Region loss (automatic) |
-| 6 | Global read replicas | Single-writer, read-local | Reads ~0 · writes min | Seconds | ~99.99% (reads) | Geo-replica DB | `$$$` | Region loss for reads (no conflicts) |
-| 7 | Active/active + global DB | Global LB + multi-region-write DB | Near-zero | Seconds | ~99.99-99.999% | Cosmos / DynamoDB / Aurora Global | `$$$$` | Region loss (transparent) |
-| 8 | Cell-based / stamps | Blast-radius isolation (overlay) | Near-zero (per cell) | Per cell | ~99.999%+ | Any (overlay) | `$$$$` | Gray failures / poison pills / noisy tenants |
-| 9 | Multi-cloud PaaS | Active/active across clouds | Near-zero | Seconds | ~99.999% | Portable compute + cross-cloud data | `$$$$$` | Region + **provider** loss |
+| 1 | [Single region + PITR](#1--single-region-single-tier--automatic-pitr) | Point-in-time restore | Min-hrs | Seconds (continuous backup) | ~99.9% | Any | `$` | (nothing, baseline) |
+| 2 | [Local HA (multi-instance)](#2--local-ha-managed-multi-instance-single-region-non-zonal) | Managed multi-instance + local replica | Seconds | ≈ 0 | ~99.9-99.95% | Standard+ / SQL Business Critical | `$$` | Instance / hardware failure |
+| 3 | [Zone-redundant](#3--zone-redundant-paas-the-9999-checkbox) | Config toggle across 3 AZ | Seconds | ≈ 0 | ~99.99% | **Premium v3** / zone-redundant DB | `$$` | Zone failure |
+| 4 | [Serverless pilot light](#4--serverless-scale-to-zero-pilot-light-multi-region-dr) | Scale-from-zero DR + geo-replica | 1-15 min | Seconds | ~99.9% + regional | Serverless compute + geo-replica | `$$` | Region loss (cheapest) |
+| 5 | [Managed failover group](#5--managed-regional-failover-group-platform-managed-warmhot-standby) | Auto-promote DB + health failover | Sec-min | Seconds | ~99.95% | Azure SQL failover groups | `$$$` | Region loss (automatic) |
+| 6 | [Global read replicas](#6--global-read-replicas-single-writer-read-local) | Single-writer, read-local | Reads ~0 · writes min | Seconds | ~99.99% (reads) | Geo-replica DB | `$$$` | Region loss for reads (no conflicts) |
+| 7 | [Active/active + global DB](#7--activeactive-with-a-globally-distributed-managed-database) | Global LB + multi-region-write DB | Near-zero | Seconds | ~99.99-99.999% | Cosmos / DynamoDB / Aurora Global | `$$$$` | Region loss (transparent) |
+| 8 | [Cell-based / stamps](#8--cell-based--deployment-stamps-blast-radius-isolation) | Blast-radius isolation (overlay) | Near-zero (per cell) | Per cell | ~99.999%+ | Any (overlay) | `$$$$` | Gray failures / poison pills / noisy tenants |
+| 9 | [Multi-cloud PaaS](#9--multi-cloud-paas-azure--aws-why-parity-is-the-hard-part) | Active/active across clouds | Near-zero | Seconds | ~99.999% | Portable compute + cross-cloud data | `$$$$$` | Region + **provider** loss |
 
 > Cost is relative: `$` ≈ one small plan; `$$$$$` ≈ two active stacks across two
 > clouds with a cross-cloud data strategy.

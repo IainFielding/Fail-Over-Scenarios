@@ -367,20 +367,20 @@ the recommended scenario, with its target SLO.
 
 | # | Topology | Failover method | RTO | RPO | Target SLO | Cost / Complexity | Protects against |
 |---|----------|-----------------|-----|-----|-----------|-------------------|------------------|
-| 1  | Active                     | Backup & Restore (manual)         | Hours       | Hours       | ~99.9%       | `$` · Low         | (nothing, baseline) |
-| 2  | Active + DR: Pilot Light   | Data replicated, compute dormant  | 30 min-hrs  | Sec-min     | ~99.9%       | `$$` · Low        | Region loss (cheapest) |
-| 3  | Active + DR: Warm Standby  | Small always-on DR, DNS failover  | 15 min-~1 h | Sec-min     | ~99.9%       | `$$` · Low-Med    | Region loss (faster) |
-| 4  | Active + DR: Hot Standby   | Full standby, **auto** failover   | Sec-min     | Sec-min     | ~99.95%      | `$$$` · Medium    | Region loss (automatic) |
-| 5  | Active + Passive           | Auto hot-standby (local, sync)    | Sec-min     | ≈ 0         | ~99.95%      | `$$` · Medium     | Instance / stack failure |
-| 6  | Active + Passive + DR      | Local auto + warm DR              | Sec-min     | ≈0 / sec    | ~99.95%      | `$$$` · Medium    | Instance + region loss |
-| 7  | Active ×3 AZ               | Active/Active across AZ (auto)    | Seconds     | ≈ 0         | ~99.99%      | `$$` · Medium     | Zone failure |
-| 8  | 3 AZ + DR region           | Auto AZ + warm 3-AZ DR            | Sec-min     | ≈0 / sec    | ~99.99%      | `$$$` · Med-High  | Zone + region loss |
-| 9  | Global read replicas       | Single-writer, read-local         | Reads ~0 · writes min | Seconds | ~99.99% (reads) | `$$$` · Medium | Region loss for reads (no write conflicts) |
-| 10 | Multi-region active/active | Active/Active multi-site          | Near-zero   | Seconds     | ~99.99-99.999% | `$$$$` · High   | Region loss (transparent) |
-| 11 | 3 AZ + DR in AWS           | Auto AZ + cross-cloud DR          | Sec-min     | ≈0 / sec    | ~99.99%      | `$$$$` · High     | Zone + region + **provider** loss |
-| 12 | Azure + AWS active/active  | Active/Active multi-cloud         | Near-zero   | Seconds     | ~99.999%     | `$$$$$` · Very High | Region + **provider** loss |
-| 13 | 2×Azure + 2×AWS, all active| Active/Active ×4, two clouds      | Near-zero   | Seconds     | ~99.999%+    | `$$$$$` · Very High | Region + provider loss (max) |
-| 14 | Cell-based / shuffle-shard | Blast-radius isolation (overlay)  | Near-zero (per cell) | Per cell | ~99.999%+  | `$$$$` · High     | Gray failures / poison pills / noisy tenants |
+| 1  | [Active](#1--active-single-site)                     | Backup & Restore (manual)         | Hours       | Hours       | ~99.9%       | `$` · Low         | (nothing, baseline) |
+| 2  | [Active + DR: Pilot Light](#2--active--dr-pilot-light)   | Data replicated, compute dormant  | 30 min-hrs  | Sec-min     | ~99.9%       | `$$` · Low        | Region loss (cheapest) |
+| 3  | [Active + DR: Warm Standby](#3--active--dr-warm-standby)  | Small always-on DR, DNS failover  | 15 min-~1 h | Sec-min     | ~99.9%       | `$$` · Low-Med    | Region loss (faster) |
+| 4  | [Active + DR: Hot Standby](#4--active--dr-automatic-hot-standby)   | Full standby, **auto** failover   | Sec-min     | Sec-min     | ~99.95%      | `$$$` · Medium    | Region loss (automatic) |
+| 5  | [Active + Passive](#5--active--passive-local-ha)           | Auto hot-standby (local, sync)    | Sec-min     | ≈ 0         | ~99.95%      | `$$` · Medium     | Instance / stack failure |
+| 6  | [Active + Passive + DR](#6--active--passive--dr)      | Local auto + warm DR              | Sec-min     | ≈0 / sec    | ~99.95%      | `$$$` · Medium    | Instance + region loss |
+| 7  | [Active ×3 AZ](#7--active-across-3-availability-zones-1-region)               | Active/Active across AZ (auto)    | Seconds     | ≈ 0         | ~99.99%      | `$$` · Medium     | Zone failure |
+| 8  | [3 AZ + DR region](#8--3-az-active--dr-region-also-3-az-active)           | Auto AZ + warm 3-AZ DR            | Sec-min     | ≈0 / sec    | ~99.99%      | `$$$` · Med-High  | Zone + region loss |
+| 9  | [Global read replicas](#9--single-writer-global-read-replicas-write-global--read-local)       | Single-writer, read-local         | Reads ~0 · writes min | Seconds | ~99.99% (reads) | `$$$` · Medium | Region loss for reads (no write conflicts) |
+| 10 | [Multi-region active/active](#10--multi-region-activeactive-3-az-per-region) | Active/Active multi-site          | Near-zero   | Seconds     | ~99.99-99.999% | `$$$$` · High   | Region loss (transparent) |
+| 11 | [3 AZ + DR in AWS](#11--azure-3-az-active--dr-in-aws-cross-cloud)           | Auto AZ + cross-cloud DR          | Sec-min     | ≈0 / sec    | ~99.99%      | `$$$$` · High     | Zone + region + **provider** loss |
+| 12 | [Azure + AWS active/active](#12--activeactive-across-azure--aws-3-az-each)  | Active/Active multi-cloud         | Near-zero   | Seconds     | ~99.999%     | `$$$$$` · Very High | Region + **provider** loss |
+| 13 | [2×Azure + 2×AWS, all active](#13--multi-cloud-multi-region-all-active)| Active/Active ×4, two clouds      | Near-zero   | Seconds     | ~99.999%+    | `$$$$$` · Very High | Region + provider loss (max) |
+| 14 | [Cell-based / shuffle-shard](#14--cell-based--shuffle-sharded-blast-radius-isolation) | Blast-radius isolation (overlay)  | Near-zero (per cell) | Per cell | ~99.999%+  | `$$$$` · High     | Gray failures / poison pills / noisy tenants |
 
 > Cost/Complexity is relative: `$` ≈ one stack to run; `$$$$$` ≈ four active
 > stacks across two clouds with global data consistency and four-way operations.
