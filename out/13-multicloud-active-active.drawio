@@ -1,5 +1,5 @@
 <mxfile host="app.diagrams.net">
-  <diagram name="08-multicloud-active-active" id="08-multicloud-active-active">
+  <diagram name="13-multicloud-active-active" id="13-multicloud-active-active">
     <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
@@ -24,7 +24,7 @@
         <mxCell id="c127" value="" style="rounded=1;dashed=0;dashPattern=8 4;fillColor=#DAE8FC;strokeColor=#888888;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontStyle=1;arcSize=4;opacity=60;" vertex="1" parent="1"><mxGeometry x="92" y="658" width="24" height="16" as="geometry"/></mxCell>
         <mxCell id="c129" value="" style="rounded=1;dashed=0;dashPattern=8 4;fillColor=#E8E8E8;strokeColor=#888888;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontStyle=1;arcSize=4;opacity=60;" vertex="1" parent="1"><mxGeometry x="92" y="682" width="24" height="16" as="geometry"/></mxCell>
         <mxCell id="c131" value="" style="rounded=1;dashed=0;dashPattern=8 4;fillColor=#FFE6CC;strokeColor=#888888;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontStyle=1;arcSize=4;opacity=60;" vertex="1" parent="1"><mxGeometry x="92" y="706" width="24" height="16" as="geometry"/></mxCell>
-        <mxCell id="c1" value="Scenario 8 - Multi-cloud, multi-region Active/Active (Azure + AWS, everything active)" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="1600" height="30" as="geometry"/></mxCell>
+        <mxCell id="c1" value="Scenario 13 - Multi-cloud, multi-region Active/Active (Azure + AWS, everything active)" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="1600" height="30" as="geometry"/></mxCell>
         <mxCell id="c3" value="App Gateway" style="sketch=0;html=1;shape=image;image=img/lib/azure2/networking/Application_Gateways.svg;verticalLabelPosition=bottom;verticalAlign=top;labelBackgroundColor=none;fontSize=11;" vertex="1" parent="1"><mxGeometry x="110" y="210" width="48" height="48" as="geometry"/></mxCell>
         <mxCell id="c4" value="Internal LB" style="sketch=0;html=1;shape=image;image=img/lib/azure2/networking/Load_Balancers.svg;verticalLabelPosition=bottom;verticalAlign=top;labelBackgroundColor=none;fontSize=11;" vertex="1" parent="1"><mxGeometry x="110" y="290" width="48" height="48" as="geometry"/></mxCell>
         <mxCell id="c6" value="Web VMs" style="sketch=0;html=1;shape=image;image=img/lib/azure2/compute/Virtual_Machine.svg;verticalLabelPosition=bottom;verticalAlign=top;labelBackgroundColor=none;fontSize=11;" vertex="1" parent="1"><mxGeometry x="321" y="210" width="48" height="48" as="geometry"/></mxCell>

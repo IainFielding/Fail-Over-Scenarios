@@ -1,6 +1,6 @@
 # Failover Methods & Service-Level Objectives (SLO)
 
-A walk-through of the ten 3-tier reference architectures in [out/](out/), the
+A walk-through of the fourteen 3-tier reference architectures in [out/](out/), the
 **failover method** each one uses, and the **availability SLO / RTO / RPO** you
 can realistically target with it.
 
@@ -43,19 +43,28 @@ can realistically target with it.
 
 ### The failover ladder (DR patterns)
 
-From cheapest/slowest to most expensive/fastest:
+From cheapest/slowest to most expensive/fastest — each rung has its own diagram:
 
-1. **Backup & Restore** — rebuild from backups after an outage. Slow RTO, lossy RPO.
-2. **Pilot Light** — core data replicated, minimal standby; scale up on failover.
-3. **Warm Standby** — a smaller always-on copy; scale up and cut over.
-4. **Active / Passive (hot standby)** — full standby, automatic health-based failover.
-5. **Active / Active (multi-site)** — all sites serve traffic; a "failover" is just
-   removing an unhealthy endpoint — effectively zero RTO.
+1. **Backup & Restore** (#1) — rebuild from backups after an outage. Slow RTO, lossy RPO.
+2. **Pilot Light** (#2) — core data replicated to a second region, compute dormant;
+   provision and scale up on failover.
+3. **Warm Standby** (#3) — a smaller always-on copy in the DR region; scale up and cut over.
+4. **Hot Standby / Active-Passive** (#4–#6) — a full standby with automatic,
+   health-probe-based failover (across regions in #4, locally in #5/#6).
+5. **Active / Active** (#7, #10, #12, #13) — all sites serve traffic; a "failover" is
+   just removing an unhealthy endpoint — effectively zero RTO.
+
+Two orthogonal choices sit alongside this ladder: the **data strategy**
+(single-writer read replicas, #9, vs multi-writer active/active) and
+**blast-radius isolation** (cell-based / shuffle sharding, #14).
 
 ### How to read the diagrams
 
 - **Solid arrows** = live traffic. **Dashed arrows** = replication / failover paths.
 - **Blue** = active, **grey** = passive/standby, **amber** = disaster-recovery site.
+- A **dashed grey box** (e.g. #2) marks **dormant compute** — provisioned only on failover.
+- Load balancers take traffic **in on top** and send it **out the side**; the
+  zone-redundant LBs fan out to every AZ.
 - Flow in every stack: `Front LB → Web → Internal LB → App → Database`.
 
 ---
@@ -75,25 +84,61 @@ some data loss are acceptable. Any single failure (VM, AZ, region) is an outage.
 
 ---
 
-## 2 · Active + DR (second region)
+## 2 · Active + DR — Pilot Light
 
-![Active + DR](out/png/02-active-dr.png)
+![Pilot Light](out/png/02-active-dr-pilot-light.png)
 
-Primary region serves traffic; a **DR region** holds a standby stack kept current
-by **async replication**. Traffic Manager fails traffic over on a regional outage.
+Primary region serves traffic; the **DR region keeps only the data tier live**
+(async-replicated). Compute is **dormant / scaled to zero** and is provisioned and
+scaled up during failover. The cheapest way to hold a real second region.
 
 | Failover method | RTO | RPO | Target SLO |
 |-----------------|-----|-----|-----------|
-| **Pilot Light / Warm Standby** — DNS-based regional failover, manual or scripted promotion of the DR database. | 15 min – few hours (promote DB, scale up, re-point DNS) | Seconds–minutes (async lag) | **~99.9%** app, plus regional disaster protection |
+| **Pilot Light** — on failover, spin up compute in the DR region, promote the replicated DB, re-point DNS. | ~30 min – few hours (provision + scale) | Seconds–minutes (async lag) | **~99.9%** app, plus regional disaster protection |
 
-**When to use:** you must survive losing an entire region but can tolerate a short,
-mostly-manual cutover and a few seconds of data loss.
+**When to use:** you must survive losing a region and want the lowest standing cost,
+and can tolerate a mostly-scripted, tens-of-minutes cutover.
 
 ---
 
-## 3 · Active + Passive (local HA)
+## 3 · Active + DR — Warm Standby
 
-![Active + Passive](out/png/03-active-passive.png)
+![Warm Standby](out/png/03-active-dr-warm-standby.png)
+
+Like Pilot Light, but the DR region runs a **smaller, always-on copy** of the full
+stack. On failover you scale it up and cut traffic over via DNS — faster than
+starting compute from cold.
+
+| Failover method | RTO | RPO | Target SLO |
+|-----------------|-----|-----|-----------|
+| **Warm Standby** — DNS regional failover, scale up the running DR stack, promote the DR database. | 15 min – ~1 h (scale up + cut over) | Seconds–minutes (async lag) | **~99.9%** app, plus regional disaster protection |
+
+**When to use:** you need a quicker regional recovery than Pilot Light and can pay
+to keep a slimmed-down stack running all the time.
+
+---
+
+## 4 · Active + DR — Automatic Hot Standby
+
+![Hot Standby](out/png/04-active-dr-hot-standby.png)
+
+A **full standby stack in a second region**, kept current by async replication, with
+**automatic** health-probe-based failover from the global load balancer — no manual
+promotion step.
+
+| Failover method | RTO | RPO | Target SLO |
+|-----------------|-----|-----|-----------|
+| **Hot Standby (active/passive across regions)** — health probe auto-fails traffic over to the standby region. | Seconds – few minutes (automatic) | Seconds–minutes (async lag) | **~99.95%** |
+
+**When to use:** you need automatic recovery from a whole-region loss without waiting
+for a human, but don't need (or can't afford the write-conflict handling of) full
+active/active.
+
+---
+
+## 5 · Active + Passive (local HA)
+
+![Active + Passive](out/png/05-active-passive.png)
 
 Two stacks in the **same region**: one active, one hot standby. **Synchronous**
 replication keeps the standby identical; failover is **automatic** on health-probe
@@ -109,9 +154,9 @@ whole-region outage.
 
 ---
 
-## 4 · Active + Passive + DR
+## 6 · Active + Passive + DR
 
-![Active + Passive + DR](out/png/04-active-passive-dr.png)
+![Active + Passive + DR](out/png/06-active-passive-dr.png)
 
 Combines local automatic HA (active/passive, sync) **with** a DR region (async).
 Two independent layers of protection.
@@ -128,9 +173,9 @@ regional recovery path, without paying for full multi-region active/active.
 
 ---
 
-## 5 · Active across 3 Availability Zones (1 region)
+## 7 · Active across 3 Availability Zones (1 region)
 
-![3 AZ Active](out/png/05-active-3az.png)
+![3 AZ Active](out/png/07-active-3az.png)
 
 One region, three AZs, **all active**. Zone-redundant load balancers spread the
 web and app tiers across AZs; the database replicates **synchronously** between
@@ -145,11 +190,11 @@ full-AZ outage with near-zero impact. Still exposed to a *region-wide* failure.
 
 ---
 
-## 6 · 3 AZ Active + DR region (also 3 AZ active)
+## 8 · 3 AZ Active + DR region (also 3 AZ active)
 
-![3 AZ + DR](out/png/06-active-3az-dr.png)
+![3 AZ + DR](out/png/08-active-3az-dr.png)
 
-Scenario 5, plus a **second region that is itself a full 3-AZ active deployment**
+Scenario 7, plus a **second region that is itself a full 3-AZ active deployment**
 held as DR (amber). Intra-region failures are absorbed automatically; a whole-region
 loss triggers a regional failover with the DR region already warm.
 
@@ -166,11 +211,56 @@ credible, capacity-matched recovery region.
 
 ---
 
-## 6.5 · 3 AZ Active (Azure) + DR in AWS — cross-cloud
+## 9 · Single-writer, global read replicas (write-global / read-local)
 
-![3 AZ + DR in AWS](out/png/06b-active-3az-dr-aws.png)
+![Global read replicas](out/png/09-global-read-replicas.png)
 
-Same shape as #6, but the DR region lives in a **different cloud provider**
+Multiple regions serve **read** traffic locally, but **all writes go to a single
+primary region**. Data flows **one-way** (primary → replicas, async). This is the
+common, conflict-free alternative to active/active: you get read-scaling and
+read-local latency **without** multi-master write conflicts.
+
+| Failover method | RTO | RPO | Target SLO |
+|-----------------|-----|-----|-----------|
+| **Single-writer + read replicas** — reads survive a region loss instantly; a primary loss requires **promoting a replica** to writer. | Reads: near-zero · Writes: minutes (promote replica) | Seconds (replication lag) | **~99.99%** for reads |
+
+**Caveat:** losing the primary region means a write outage until a replica is
+promoted, and any un-replicated writes are lost (RPO = lag). No conflict resolution
+is needed because there is only ever one writer.
+
+**When to use:** read-heavy global apps (catalogs, feeds, dashboards) that want
+low-latency local reads and regional read resilience, but can keep a single write
+region.
+
+---
+
+## 10 · Multi-region Active/Active (3 AZ per region)
+
+![Multi-region active/active](out/png/10-multi-region-active.png)
+
+Two regions, **both serving live traffic**, each internally 3-AZ active. A global
+load balancer distributes users; data replicates **bidirectionally (async)**.
+There is no "failover" in the classic sense — a failed region is simply removed
+from rotation.
+
+| Failover method | RTO | RPO | Target SLO |
+|-----------------|-----|-----|-----------|
+| **Active/Active multi-site** — global LB drops the unhealthy region; surviving region carries the load. | Near-zero (sub-minute) | Seconds (async lag) | **~99.99% – 99.999%** |
+
+**Caveat:** bidirectional async replication means **write conflicts are possible**
+— you need conflict resolution (last-writer-wins, CRDTs, partitioned ownership)
+or a single-writer model (see #9). Capacity-plan so one region can absorb 100% of load.
+
+**When to use:** global, latency-sensitive, high-revenue services that cannot
+tolerate a regional outage even briefly.
+
+---
+
+## 11 · Azure 3 AZ Active + DR in AWS — cross-cloud
+
+![3 AZ + DR in AWS](out/png/11-active-3az-dr-aws.png)
+
+Same shape as #8, but the DR region lives in a **different cloud provider**
 (Azure primary → AWS DR). Adds protection against a **provider-wide** outage or
 account-level issue, at the cost of cross-cloud data replication and dual tooling.
 
@@ -187,33 +277,11 @@ complexity (two platforms, two skill sets, data-sovereignty review).
 
 ---
 
-## 7 · Multi-region Active/Active (3 AZ per region)
+## 12 · Active/Active across Azure + AWS (3 AZ each)
 
-![Multi-region active/active](out/png/07-multi-region-active.png)
+![Active/Active Azure + AWS](out/png/12-active-active-azure-aws.png)
 
-Two regions, **both serving live traffic**, each internally 3-AZ active. A global
-load balancer distributes users; data replicates **bidirectionally (async)**.
-There is no "failover" in the classic sense — a failed region is simply removed
-from rotation.
-
-| Failover method | RTO | RPO | Target SLO |
-|-----------------|-----|-----|-----------|
-| **Active/Active multi-site** — global LB drops the unhealthy region; surviving region carries the load. | Near-zero (sub-minute) | Seconds (async lag) | **~99.99% – 99.999%** |
-
-**Caveat:** bidirectional async replication means **write conflicts are possible**
-— you need conflict resolution (last-writer-wins, CRDTs, partitioned ownership)
-or a single-writer model. Capacity-plan so one region can absorb 100% of load.
-
-**When to use:** global, latency-sensitive, high-revenue services that cannot
-tolerate a regional outage even briefly.
-
----
-
-## 7.5 · Active/Active across Azure + AWS (3 AZ each)
-
-![Active/Active Azure + AWS](out/png/07b-active-active-azure-aws.png)
-
-Scenario 7 spanning **two different clouds**: a 3-AZ active region in Azure and a
+Scenario 10 spanning **two different clouds**: a 3-AZ active region in Azure and a
 3-AZ active region in AWS, both live behind a global DNS. Survives the loss of an
 entire cloud provider with no failover event.
 
@@ -221,7 +289,7 @@ entire cloud provider with no failover event.
 |-----------------|-----|-----|-----------|
 | **Active/Active multi-cloud** — global DNS removes the failed cloud; the other serves everything. | Near-zero | Seconds (cross-cloud async) | **~99.999%** |
 
-**Caveat:** all the multi-region conflict concerns of #7, **plus** cross-cloud
+**Caveat:** all the multi-region conflict concerns of #10, **plus** cross-cloud
 network latency, egress cost, and the challenge of keeping two platform stacks
 truly equivalent (IAM, networking, managed-DB semantics differ).
 
@@ -230,9 +298,9 @@ business risk and the cost of true multi-cloud parity is justified.
 
 ---
 
-## 8 · Multi-cloud, multi-region, all active
+## 13 · Multi-cloud, multi-region, all active
 
-![Multi-cloud all active](out/png/08-multicloud-active-active.png)
+![Multi-cloud all active](out/png/13-multicloud-active-active.png)
 
 The maximum-resilience topology: **two active regions in each of Azure and AWS**
 (four active 3-AZ deployments), everything live, global DNS distribution, and
@@ -252,17 +320,41 @@ lost revenue and regulatory/risk posture mandates cloud independence.
 
 ---
 
+## 14 · Cell-based / shuffle-sharded (blast-radius isolation)
+
+![Cell-based](out/png/14-cell-based.png)
+
+Instead of one big shared stack, the workload is split into independent **cells**,
+each a self-contained full stack serving a fixed slice of tenants. A **cell router**
+uses **shuffle sharding** to pin each tenant to a cell. A failure — including a
+**gray failure or poison-pill request** that active/active alone can't stop —
+is contained to that cell's tenants.
+
+| Failover method | RTO | RPO | Target SLO |
+|-----------------|-----|-----|-----------|
+| **Cell-based isolation** — a failed cell affects only its tenants; the router routes around it. | Near-zero for unaffected cells | Per-cell (as its data tier dictates) | **~99.999%+** with a bounded blast radius |
+
+**Caveat:** this is an *architectural overlay*, usually combined with AZ/region
+redundancy (#7–#13), not a substitute for it. It adds routing/partitioning
+complexity and requires the app to be cleanly tenant-partitionable.
+
+**When to use:** large multi-tenant SaaS where a single bad deploy, hot tenant, or
+poison-pill request must never take down all customers at once.
+
+---
+
 ## Decision flow — which topology?
 
 Work top-down from **Start**. Green = *Yes*, grey = *No*. Outcome boxes are
 heat-coloured by SLO (red → orange → yellow → green = least → most resilient).
 
-![Decision flowchart](out/png/09-decision-flowchart.png)
+![Decision flowchart](out/png/15-decision-flowchart.png)
 
 The flow asks, in order: can you tolerate a provider-wide outage, then a region
 outage, then a zone/instance failure — and at each level whether you need
-zero-downtime *active/active* or can accept a *failover* event. The leaf you land
-on is the recommended scenario, with its target SLO.
+zero-downtime *active/active* (and multi-master writes) or can accept a *failover*
+event (and how fast it must be: pilot light → warm → hot). The leaf you land on is
+the recommended scenario, with its target SLO.
 
 ---
 
@@ -270,16 +362,20 @@ on is the recommended scenario, with its target SLO.
 
 | # | Topology | Failover method | RTO | RPO | Target SLO | Cost / Complexity | Protects against |
 |---|----------|-----------------|-----|-----|-----------|-------------------|------------------|
-| 1   | Active                     | Backup & Restore (manual)        | Hours       | Hours       | ~99.9%       | `$` · Low        | (nothing — baseline) |
-| 2   | Active + DR                | Pilot light / warm standby (DNS) | 15 min–hrs  | Sec–min     | ~99.9%       | `$$` · Low–Med   | Region loss (slow) |
-| 3   | Active + Passive           | Auto hot-standby (local)         | Sec–min     | ≈ 0         | ~99.95%      | `$$` · Medium    | Instance / stack failure |
-| 4   | Active + Passive + DR      | Local auto + warm DR             | Sec→min     | ≈0 / sec    | ~99.95%      | `$$$` · Medium   | Instance + region loss |
-| 5   | Active ×3 AZ               | Active/Active across AZ (auto)   | Seconds     | ≈ 0         | ~99.99%      | `$$` · Medium    | Zone failure |
-| 6   | 3 AZ + DR region           | Auto AZ + warm 3-AZ DR           | Sec→min     | ≈0 / sec    | ~99.99%      | `$$$` · Med–High | Zone + region loss |
-| 6.5 | 3 AZ + DR in AWS           | Auto AZ + cross-cloud DR         | Sec→min     | ≈0 / sec    | ~99.99%      | `$$$$` · High    | Zone + region + **provider** loss |
-| 7   | Multi-region active/active | Active/Active multi-site         | Near-zero   | Seconds     | ~99.99–99.999% | `$$$$` · High  | Region loss (transparent) |
-| 7.5 | Azure + AWS active/active  | Active/Active multi-cloud        | Near-zero   | Seconds     | ~99.999%     | `$$$$$` · Very High | Region + **provider** loss |
-| 8   | 2×Azure + 2×AWS, all active| Active/Active ×4, two clouds     | Near-zero   | Seconds     | ~99.999%+    | `$$$$$` · Very High | Region + provider loss (max) |
+| 1  | Active                     | Backup & Restore (manual)         | Hours       | Hours       | ~99.9%       | `$` · Low         | (nothing — baseline) |
+| 2  | Active + DR: Pilot Light   | Data replicated, compute dormant  | 30 min–hrs  | Sec–min     | ~99.9%       | `$$` · Low        | Region loss (cheapest) |
+| 3  | Active + DR: Warm Standby  | Small always-on DR, DNS failover  | 15 min–~1 h | Sec–min     | ~99.9%       | `$$` · Low–Med    | Region loss (faster) |
+| 4  | Active + DR: Hot Standby   | Full standby, **auto** failover   | Sec–min     | Sec–min     | ~99.95%      | `$$$` · Medium    | Region loss (automatic) |
+| 5  | Active + Passive           | Auto hot-standby (local, sync)    | Sec–min     | ≈ 0         | ~99.95%      | `$$` · Medium     | Instance / stack failure |
+| 6  | Active + Passive + DR      | Local auto + warm DR              | Sec→min     | ≈0 / sec    | ~99.95%      | `$$$` · Medium    | Instance + region loss |
+| 7  | Active ×3 AZ               | Active/Active across AZ (auto)    | Seconds     | ≈ 0         | ~99.99%      | `$$` · Medium     | Zone failure |
+| 8  | 3 AZ + DR region           | Auto AZ + warm 3-AZ DR            | Sec→min     | ≈0 / sec    | ~99.99%      | `$$$` · Med–High  | Zone + region loss |
+| 9  | Global read replicas       | Single-writer, read-local         | Reads ~0 · writes min | Seconds | ~99.99% (reads) | `$$$` · Medium | Region loss for reads (no write conflicts) |
+| 10 | Multi-region active/active | Active/Active multi-site          | Near-zero   | Seconds     | ~99.99–99.999% | `$$$$` · High   | Region loss (transparent) |
+| 11 | 3 AZ + DR in AWS           | Auto AZ + cross-cloud DR          | Sec→min     | ≈0 / sec    | ~99.99%      | `$$$$` · High     | Zone + region + **provider** loss |
+| 12 | Azure + AWS active/active  | Active/Active multi-cloud         | Near-zero   | Seconds     | ~99.999%     | `$$$$$` · Very High | Region + **provider** loss |
+| 13 | 2×Azure + 2×AWS, all active| Active/Active ×4, two clouds      | Near-zero   | Seconds     | ~99.999%+    | `$$$$$` · Very High | Region + provider loss (max) |
+| 14 | Cell-based / shuffle-shard | Blast-radius isolation (overlay)  | Near-zero (per cell) | Per cell | ~99.999%+  | `$$$$` · High     | Gray failures / poison pills / noisy tenants |
 
 > Cost/Complexity is relative: `$` ≈ one stack to run; `$$$$$` ≈ four active
 > stacks across two clouds with global data consistency and four-way operations.
@@ -288,9 +384,14 @@ on is the recommended scenario, with its target SLO.
 
 - **Cost & complexity rise sharply** down the table; only buy the resilience the
   business case requires.
-- **Sync replication (RPO≈0)** is only practical within a metro/region (#3–#6
+- **Sync replication (RPO≈0)** is only practical within a metro/region (#5–#8
   intra-AZ). Cross-region and cross-cloud are **async** → accept seconds of RPO.
-- **Active/active eliminates the failover event** (and its RTO risk) but moves the
-  hard problem to **data consistency / conflict resolution**.
+- **Regional DR is a ladder** (#2 → #3 → #4): pilot light is cheapest/slowest,
+  hot standby is priciest/automatic. Pick the rung your RTO justifies.
+- **Data strategy is a separate axis:** single-writer read replicas (#9) trade
+  write-region failover for zero conflict handling; active/active (#10+) eliminates
+  the failover event but moves the hard problem to **conflict resolution**.
+- **Cell-based (#14) is an overlay**, not a rung — layer it on #7–#13 to bound the
+  blast radius of gray failures and bad deploys.
 - A topology's SLO is only as good as its **weakest serial tier** and your
   **tested runbooks** — an untested DR region is an aspiration, not an SLO.

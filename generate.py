@@ -232,7 +232,7 @@ def dns(d, x, y, theme=None, label=None):
 
 # ---------- Scenario builders ----------
 
-def s1():
+def s01_active():
     d = Diagram("01-active")
     d.text(0, 0, 700, 30, "Scenario 1 - Active (single site)", size=16, bold=True)
     tm = dns(d, 300, 50)
@@ -243,24 +243,70 @@ def s1():
     d.save("01-active.drawio")
 
 
-def s2():
-    d = Diagram("02-active-dr")
-    d.text(0, 0, 900, 30, "Scenario 2 - Active + DR (second region)", size=16, bold=True)
+def s02_pilot():
+    d = Diagram("02-active-dr-pilot-light")
+    d.text(0, 0, 1000, 30,
+           "Scenario 2 - Active + DR (Pilot Light)", size=16, bold=True)
     tm = dns(d, 430, 50)
     d.box(180, 130, 250, 410, "Region 1  (Active)", ACTIVE)
     a = d.stack(230, 165)
-    d.box(560, 130, 250, 410, "Region 2  (DR)", DR)
-    dr = d.stack(610, 165, tag=" (DR)")
+    d.box(560, 130, 250, 410, "Region 2  (DR - Pilot Light)", DR)
+    # Only the data tier stays live in the DR region; the compute tiers are
+    # dormant and provisioned / scaled up on failover.
+    dormant = d.box(610, 165, 150, 235, "Compute dormant", PASSIVE)
+    drdb = d.shape(610 + 51, 165 + 280, "SQL DB (DR)", THEME_AZURE["db"])
+    d.text(560, 545, 250, 30,
+           "Compute scaled to 0 - provisioned on failover", size=9)
     d.edge(tm, a["lb"], "traffic")
-    d.edge(tm, dr["lb"], "failover", dashed=True, color="#888888")
-    d.edge(a["db"], dr["db"], "async replication", dashed=True, color="#D79B00")
+    d.edge(tm, dormant, "failover: provision + scale up",
+           dashed=True, color="#888888")
+    d.edge(a["db"], drdb, "async replication (data only)",
+           dashed=True, color="#D79B00", exit=(1, 0.5), entry=(0, 0.5))
     d.legend(900, 130)
-    d.save("02-active-dr.drawio")
+    d.save("02-active-dr-pilot-light.drawio")
 
 
-def s3():
-    d = Diagram("03-active-passive")
-    d.text(0, 0, 900, 30, "Scenario 3 - Active + Passive (local HA)", size=16, bold=True)
+def s03_warm():
+    d = Diagram("03-active-dr-warm-standby")
+    d.text(0, 0, 1000, 30,
+           "Scenario 3 - Active + DR (Warm Standby)", size=16, bold=True)
+    tm = dns(d, 430, 50)
+    d.box(180, 130, 250, 410, "Region 1  (Active)", ACTIVE)
+    a = d.stack(230, 165)
+    d.box(560, 130, 250, 410, "Region 2  (DR - Warm Standby)", DR)
+    dr = d.stack(610, 165, tag=" (warm)")
+    d.edge(tm, a["lb"], "traffic")
+    d.edge(tm, dr["lb"], "failover (scale up + cut over)",
+           dashed=True, color="#888888")
+    d.edge(a["db"], dr["db"], "async replication",
+           dashed=True, color="#D79B00")
+    d.legend(900, 130)
+    d.save("03-active-dr-warm-standby.drawio")
+
+
+def s04_hot():
+    d = Diagram("04-active-dr-hot-standby")
+    d.text(0, 0, 1000, 30,
+           "Scenario 4 - Active + DR (Automatic Hot Standby)",
+           size=16, bold=True)
+    tm = dns(d, 430, 50)
+    d.box(180, 130, 250, 410, "Region 1  (Active)", ACTIVE)
+    a = d.stack(230, 165)
+    d.box(560, 130, 250, 410, "Region 2  (Hot standby)", PASSIVE)
+    p = d.stack(610, 165, tag=" (standby)")
+    d.edge(tm, a["lb"], "traffic")
+    d.edge(tm, p["lb"], "automatic failover (health probe)",
+           dashed=True, color="#888888")
+    d.edge(a["db"], p["db"], "async replication",
+           dashed=True, color="#D79B00")
+    d.legend(900, 130)
+    d.save("04-active-dr-hot-standby.drawio")
+
+
+def s05_ap():
+    d = Diagram("05-active-passive")
+    d.text(0, 0, 900, 30, "Scenario 5 - Active + Passive (local HA)",
+           size=16, bold=True)
     tm = dns(d, 430, 50)
     d.box(150, 130, 620, 440, "Region 1", REGION)
     d.box(180, 160, 250, 390, "Active", ACTIVE)
@@ -271,12 +317,13 @@ def s3():
     d.edge(tm, p["lb"], "failover", dashed=True, color="#888888")
     d.edge(a["db"], p["db"], "sync replication", dashed=True, color="#6C8EBF")
     d.legend(820, 130)
-    d.save("03-active-passive.drawio")
+    d.save("05-active-passive.drawio")
 
 
-def s4():
-    d = Diagram("04-active-passive-dr")
-    d.text(0, 0, 1100, 30, "Scenario 4 - Active + Passive + DR", size=16, bold=True)
+def s06_apdr():
+    d = Diagram("06-active-passive-dr")
+    d.text(0, 0, 1100, 30, "Scenario 6 - Active + Passive + DR",
+           size=16, bold=True)
     tm = dns(d, 520, 50)
     d.box(120, 130, 620, 440, "Region 1 (Active/Passive HA)", REGION)
     d.box(150, 160, 250, 390, "Active", ACTIVE)
@@ -296,7 +343,7 @@ def s4():
            exit=(0.5, 1), entry=(0.5, 1),
            waypoints=[(275, db_lane), (945, db_lane)])
     d.legend(1100, 130)
-    d.save("04-active-passive-dr.drawio")
+    d.save("06-active-passive-dr.drawio")
 
 
 def az_region(d, x, label, fill, n=3, theme=None, region_fill=None):
@@ -357,22 +404,22 @@ def az_region(d, x, label, fill, n=3, theme=None, region_fill=None):
             "dbs": dbs, "w": region_w, "h": region_h}
 
 
-def s5():
-    d = Diagram("05-active-3az")
+def s07_3az():
+    d = Diagram("07-active-3az")
     d.text(0, 0, 900, 30,
-           "Scenario 5 - Active across 3 Availability Zones (1 region)",
+           "Scenario 7 - Active across 3 Availability Zones (1 region)",
            size=16, bold=True)
     tm = dns(d, 330, 60)
     r = az_region(d, 120, "Region 1  (3 AZ Active/Active/Active)", ACTIVE)
     d.edge(tm, r["front"], "traffic")
     d.legend(120 + r["w"] + 40, 160)
-    d.save("05-active-3az.drawio")
+    d.save("07-active-3az.drawio")
 
 
-def s6():
-    d = Diagram("06-active-3az-dr")
+def s08_3azdr():
+    d = Diagram("08-active-3az-dr")
     d.text(0, 0, 1200, 30,
-           "Scenario 6 - 3 AZ Active + DR (second region)", size=16, bold=True)
+           "Scenario 8 - 3 AZ Active + DR (second region)", size=16, bold=True)
     r = az_region(d, 100, "Region 1  (3 AZ Active)", ACTIVE)
     drx = 100 + r["w"] + 80
     dr = az_region(d, drx, "Region 2  (DR - 3 AZ Active/Active/Active)",
@@ -384,13 +431,36 @@ def s6():
     d.edge(r["dbs"][2], dr["dbs"][0], "async replication",
            dashed=True, color="#D79B00", exit=(1, 0.5), entry=(0, 0.5))
     d.legend(100, 130 + r["h"] + 20)
-    d.save("06-active-3az-dr.drawio")
+    d.save("08-active-3az-dr.drawio")
 
 
-def s7():
-    d = Diagram("07-multi-region-active")
+def s09_reads():
+    d = Diagram("09-global-read-replicas")
+    d.text(0, 0, 1200, 30,
+           "Scenario 9 - Single-writer, global read replicas "
+           "(write-global / read-local)", size=16, bold=True)
+    tm = dns(d, 490, 50, label="Global DNS (geo-routing)")
+    d.box(150, 130, 250, 410, "Region 1  (Primary - reads + writes)", ACTIVE)
+    a = d.stack(200, 165)
+    d.box(620, 130, 250, 410, "Region 2  (Read replica - reads only)", ACTIVE)
+    b = d.stack(670, 165, tag=" (replica)")
+    d.edge(tm, a["lb"], "read + write traffic", color="#82B366")
+    d.edge(tm, b["lb"], "read-only traffic", color="#82B366")
+    # one-way (single-writer) async replication: primary -> replica
+    d.edge(a["db"], b["db"], "one-way async replication (primary -> replica)",
+           dashed=True, color="#D79B00", exit=(1, 0.5), entry=(0, 0.5))
+    d.text(150, 560, 720, 40,
+           "Writes always go to the Region 1 primary; a region-1 loss means<br>"
+           "promoting a replica (RPO = replication lag). Single writer - "
+           "no write conflicts.", size=10)
+    d.legend(950, 130)
+    d.save("09-global-read-replicas.drawio")
+
+
+def s10_multi():
+    d = Diagram("10-multi-region-active")
     d.text(0, 0, 1400, 30,
-           "Scenario 7 - Multi-region Active/Active (3 AZ per region)",
+           "Scenario 10 - Multi-region Active/Active (3 AZ per region)",
            size=16, bold=True)
     tm = dns(d, 620, 60)
     r1 = az_region(d, 80, "Region 1  (3 AZ Active)", ACTIVE)
@@ -403,13 +473,13 @@ def s7():
            "bidirectional async replication", dashed=True, color="#D79B00",
            exit=(1, 0.5), entry=(0, 0.5))
     d.legend(80, 130 + r1["h"] + 20)
-    d.save("07-multi-region-active.drawio")
+    d.save("10-multi-region-active.drawio")
 
 
-def s6b():
-    d = Diagram("06b-active-3az-dr-aws")
+def s11_3azdraws():
+    d = Diagram("11-active-3az-dr-aws")
     d.text(0, 0, 1300, 30,
-           "Scenario 6.5 - Azure 3 AZ Active + DR in AWS (cross-cloud)",
+           "Scenario 11 - Azure 3 AZ Active + DR in AWS (cross-cloud)",
            size=16, bold=True)
     r = az_region(d, 100, "Azure Region  (3 AZ Active)", ACTIVE, theme=THEME_AZURE)
     drx = 100 + r["w"] + 80
@@ -421,13 +491,13 @@ def s6b():
     d.edge(r["dbs"][2], dr["dbs"][0], "cross-cloud async replication",
            dashed=True, color="#D79B00", exit=(1, 0.5), entry=(0, 0.5))
     d.legend(100, 130 + r["h"] + 20)
-    d.save("06b-active-3az-dr-aws.drawio")
+    d.save("11-active-3az-dr-aws.drawio")
 
 
-def s7b():
-    d = Diagram("07b-active-active-azure-aws")
+def s12_aaaws():
+    d = Diagram("12-active-active-azure-aws")
     d.text(0, 0, 1400, 30,
-           "Scenario 7.5 - Active/Active across Azure + AWS (3 AZ each)",
+           "Scenario 12 - Active/Active across Azure + AWS (3 AZ each)",
            size=16, bold=True)
     tm = dns(d, 620, 60, theme=THEME_AZURE,
              label="Global DNS (Traffic Manager / Route 53)")
@@ -440,13 +510,13 @@ def s7b():
            "bidirectional async replication (cross-cloud)",
            dashed=True, color="#D79B00", exit=(1, 0.5), entry=(0, 0.5))
     d.legend(80, 130 + r1["h"] + 20)
-    d.save("07b-active-active-azure-aws.drawio")
+    d.save("12-active-active-azure-aws.drawio")
 
 
-def s8():
-    d = Diagram("08-multicloud-active-active")
+def s13_multicloud():
+    d = Diagram("13-multicloud-active-active")
     d.text(0, 0, 1600, 30,
-           "Scenario 8 - Multi-cloud, multi-region Active/Active "
+           "Scenario 13 - Multi-cloud, multi-region Active/Active "
            "(Azure + AWS, everything active)", size=16, bold=True)
     specs = [
         ("Azure Region 1  (3 AZ Active)", THEME_AZURE),
@@ -471,13 +541,45 @@ def s8():
         d.edge(regions[i]["dbs"][2], regions[i + 1]["dbs"][0], lbl,
                dashed=True, color="#D79B00", exit=(1, 0.5), entry=(0, 0.5))
     d.legend(80, 130 + regions[0]["h"] + 20)
-    d.save("08-multicloud-active-active.drawio")
+    d.save("13-multicloud-active-active.drawio")
+
+
+def s14_cell():
+    d = Diagram("14-cell-based")
+    d.text(0, 0, 1300, 30,
+           "Scenario 14 - Cell-based / shuffle-sharded (blast-radius isolation)",
+           size=16, bold=True)
+    tm = dns(d, 500, 40, label="Global DNS")
+    router = d.pnode(360, 130,
+                     "Cell router / partition layer<br>"
+                     "(shuffle sharding: each tenant pinned to a fixed cell)",
+                     w=320, h=60, fill="#E1D5E7", stroke="#9673A6")
+    d.edge(tm, router)
+    n = 4
+    cell_w, pitch, y0 = 180, 210, 260
+    lane = y0 - 20
+    for i in range(n):
+        cx0 = 90 + i * pitch
+        failed = (i == 2)
+        fill = PASSIVE if failed else ACTIVE
+        lbl = f"Cell {i + 1}" + ("  (failed)" if failed else "")
+        d.box(cx0, y0, cell_w, 380, lbl, fill)
+        st = d.stack(cx0 + 15, y0 + 40, tag=f" C{i + 1}")
+        lb_cx = cx0 + 15 + 51 + 24
+        d.edge(router, st["lb"], exit=(0.5, 1), entry=(0.5, 0),
+               waypoints=[(520, lane), (lb_cx, lane)])
+    d.text(90, y0 + 400, 840, 40,
+           "Each cell is an independent full stack serving a slice of tenants.<br>"
+           "A cell failure (or poison-pill request) is contained to that cell's "
+           "tenants - it cannot take down the whole service.", size=10)
+    d.legend(90 + n * pitch + 20, y0)
+    d.save("14-cell-based.drawio")
 
 
 def flowchart():
     """Decision tree for choosing one of the topologies above."""
-    d = Diagram("09-decision-flowchart")
-    d.text(0, 0, 1700, 30,
+    d = Diagram("15-decision-flowchart")
+    d.text(0, 0, 1900, 30,
            "Choosing a 3-tier resilience topology - decision flow",
            size=16, bold=True)
 
@@ -493,35 +595,47 @@ def flowchart():
                     stroke="#9673A6", arc=40)
     q1 = d.diamond(X(1), 350, "Survive an entire<br>cloud-provider outage?")
     q5 = d.diamond(X(2), 150, "Survive a full<br>region outage?")
-    q2 = d.diamond(X(2), 600, "Need continuous service,<br>"
+    q2 = d.diamond(X(2), 620, "Need continuous service,<br>"
                               "no failover (active/active)?")
     q9 = d.diamond(X(3), 60, "Need automatic recovery<br>"
                              "from instance / zone failure?")
     q6 = d.diamond(X(3), 300, "Need zero-downtime regional<br>"
                               "failover (active/active)?")
-    q3 = d.diamond(X(3), 720, "More than one<br>region per cloud?")
-    q10 = d.diamond(X(4), 150, "Spread compute across<br>multiple AZs?")
-    q7 = d.diamond(X(4), 430, "Is the primary already<br>3-AZ active?")
-    q8 = d.diamond(X(5), 500, "Need automatic local<br>HA (no data loss) too?")
+    q3 = d.diamond(X(3), 760, "More than one<br>region per cloud?")
+    q10 = d.diamond(X(4), 110, "Spread compute across<br>multiple AZs?")
+    qw = d.diamond(X(4), 290, "Need multi-region writes<br>(multi-master)?")
+    q7 = d.diamond(X(4), 460, "Is the primary already<br>3-AZ active?")
+    q8 = d.diamond(X(5), 460, "Need automatic local<br>HA (no data loss) too?")
+    qdr = d.diamond(X(6), 460, "How fast must regional<br>recovery be?")
+    qcell = d.diamond(X(4), 870, "Also need per-tenant<br>"
+                                 "blast-radius isolation?")
 
-    # --- outcome nodes ---
-    o1 = d.pnode(X(4), 40, "1 · Active<br>SLO ~99.9%", fill=RED, stroke=RS)
-    o5 = d.pnode(X(5), 110, "5 · 3-AZ Active<br>SLO ~99.99%", fill=YEL, stroke=YS)
-    o3 = d.pnode(X(5), 230, "3 · Active + Passive<br>SLO ~99.95%",
+    # --- outcome nodes (SLO heat-coloured) ---
+    o1 = d.pnode(X(4), 20, "1 · Active<br>SLO ~99.9%", fill=RED, stroke=RS)
+    o7 = d.pnode(X(5), 40, "7 · 3-AZ Active<br>SLO ~99.99%", fill=YEL, stroke=YS)
+    o5 = d.pnode(X(5), 160, "5 · Active + Passive<br>SLO ~99.95%",
                  fill=ORANGE, stroke=OS)
-    o7 = d.pnode(X(4), 300, "7 · Multi-region A/A<br>SLO ~99.99–99.999%",
-                 fill=GRN, stroke=GS)
-    o6 = d.pnode(X(5), 390, "6 · 3-AZ + DR region<br>SLO ~99.99%",
-                 fill=YEL, stroke=YS)
-    o4 = d.pnode(X(6), 470, "4 · Active + Passive + DR<br>SLO ~99.95%",
-                 fill=ORANGE, stroke=OS)
-    o2 = d.pnode(X(6), 570, "2 · Active + DR<br>SLO ~99.9%", fill=RED, stroke=RS)
-    o6b = d.pnode(X(4), 600, "6.5 · 3-AZ + DR in AWS<br>SLO ~99.99%",
-                  fill=YEL, stroke=YS)
-    o7b = d.pnode(X(4), 720, "7.5 · Azure + AWS A/A<br>SLO ~99.999%",
+    o10 = d.pnode(X(5), 250, "10 · Multi-region A/A<br>SLO ~99.99–99.999%",
                   fill=GRN, stroke=GS)
-    o8 = d.pnode(X(4), 830, "8 · Multi-cloud A/A<br>SLO ~99.999%+",
-                 fill=GRN, stroke=GS)
+    o9 = d.pnode(X(5), 355, "9 · Global read replicas<br>SLO ~99.99% (reads)",
+                 fill=YEL, stroke=YS)
+    o8 = d.pnode(X(5), 560, "8 · 3-AZ + DR region<br>SLO ~99.99%",
+                 fill=YEL, stroke=YS)
+    o6 = d.pnode(X(6), 330, "6 · Active + Passive + DR<br>SLO ~99.95%",
+                 fill=ORANGE, stroke=OS)
+    o2 = d.pnode(X(7), 360, "2 · Pilot Light<br>SLO ~99.9%", fill=RED, stroke=RS)
+    o3 = d.pnode(X(7), 450, "3 · Warm Standby<br>SLO ~99.9%",
+                 fill=RED, stroke=RS)
+    o4 = d.pnode(X(7), 540, "4 · Hot Standby (auto)<br>SLO ~99.95%",
+                 fill=ORANGE, stroke=OS)
+    o11 = d.pnode(X(4), 620, "11 · 3-AZ + DR in AWS<br>SLO ~99.99%",
+                  fill=YEL, stroke=YS)
+    o12 = d.pnode(X(4), 760, "12 · Azure + AWS A/A<br>SLO ~99.999%",
+                  fill=GRN, stroke=GS)
+    o13 = d.pnode(X(5), 810, "13 · Multi-cloud A/A<br>SLO ~99.999%+",
+                  fill=GRN, stroke=GS)
+    o14 = d.pnode(X(5), 915, "14 · Cell-based<br>SLO ~99.999%+ (isolated)",
+                  fill=GRN, stroke=GS)
 
     YES, NO = "#82B366", "#999999"
     d.edge(start, q1)
@@ -531,22 +645,31 @@ def flowchart():
     d.edge(q5, q6, "Yes", color=YES)
     d.edge(q9, o1, "No", color=NO)
     d.edge(q9, q10, "Yes", color=YES)
-    d.edge(q10, o5, "Yes", color=YES)
-    d.edge(q10, o3, "No", color=NO)
-    d.edge(q6, o7, "Yes", color=YES)
+    d.edge(q10, o7, "Yes", color=YES)
+    d.edge(q10, o5, "No", color=NO)
+    d.edge(q6, qw, "Yes", color=YES)
     d.edge(q6, q7, "No", color=NO)
-    d.edge(q7, o6, "Yes", color=YES)
+    d.edge(qw, o10, "Yes", color=YES)
+    d.edge(qw, o9, "No", color=NO)
+    d.edge(q7, o8, "Yes", color=YES)
     d.edge(q7, q8, "No", color=NO)
-    d.edge(q8, o4, "Yes", color=YES)
-    d.edge(q8, o2, "No", color=NO)
-    d.edge(q2, o6b, "No", color=NO)
+    d.edge(q8, o6, "Yes", color=YES)
+    d.edge(q8, qdr, "No", color=NO)
+    d.edge(qdr, o2, "Slow / cheap", color=NO)
+    d.edge(qdr, o3, "Warm", color=NO)
+    d.edge(qdr, o4, "Auto / fast", color=YES)
+    d.edge(q2, o11, "No", color=NO)
     d.edge(q2, q3, "Yes", color=YES)
-    d.edge(q3, o7b, "No", color=NO)
-    d.edge(q3, o8, "Yes", color=YES)
-    d.save("09-decision-flowchart.drawio")
+    d.edge(q3, o12, "No", color=NO)
+    d.edge(q3, qcell, "Yes", color=YES)
+    d.edge(qcell, o13, "No", color=NO)
+    d.edge(qcell, o14, "Yes", color=YES)
+    d.save("15-decision-flowchart.drawio")
 
 
 if __name__ == "__main__":
-    for fn in (s1, s2, s3, s4, s5, s6, s6b, s7, s7b, s8, flowchart):
+    for fn in (s01_active, s02_pilot, s03_warm, s04_hot, s05_ap, s06_apdr,
+               s07_3az, s08_3azdr, s09_reads, s10_multi, s11_3azdraws,
+               s12_aaaws, s13_multicloud, s14_cell, flowchart):
         fn()
     print("done")
