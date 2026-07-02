@@ -4,6 +4,11 @@ A walk-through of the fourteen 3-tier reference architectures in [out/](out/), t
 **failover method** each one uses, and the **availability SLO / RTO / RPO** you
 can realistically target with it.
 
+> **Building on managed PaaS instead of VMs?** See the companion
+> [PaaS Failover Methods](paas-failover-methods.md) — the same story retold with
+> App Service, Azure SQL, Cosmos DB and Front Door, where several of these rungs
+> collapse into a SKU tier and a config toggle.
+
 > The numbers below are **illustrative design targets**, not contractual SLAs.
 > Your actual SLO is bounded by each cloud's component SLAs (compute, load
 > balancer, database, DNS) and your operational maturity. Treat them as a
