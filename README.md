@@ -400,3 +400,62 @@ the recommended scenario, with its target SLO.
   blast radius of gray failures and bad deploys.
 - A topology's SLO is only as good as its **weakest serial tier** and your
   **tested runbooks**: an untested DR region is an aspiration, not an SLO.
+
+---
+
+## Cross-cutting concerns (what the ladder doesn't show)
+
+The ladder above scales resilience to **infrastructure** loss (instance → zone →
+region → provider). These concerns cut across every rung and decide whether the
+SLO you designed is the SLO you actually get.
+
+- **DR is not backup — protect the *other* axis too.** Every rung from Hot
+  Standby (#4) up replicates data faithfully, which means it also replicates a
+  `DROP TABLE`, a ransomware encryption, or a bad-deploy data mutation to every
+  region in seconds. Failover protects against **infrastructure** loss; only
+  **point-in-time, immutable, or air-gapped backups** protect against **logical**
+  loss (corruption, deletion, malicious action). They are orthogonal axes: you
+  need backups at *every* tier, not just at #1. Active/active is the *worst*
+  defence against corruption, not the best, because it spreads it fastest.
+
+- **Detection and triggering cap your real RTO.** The RTO clock starts when the
+  failure is *detected*, not when it happens. A health-probe interval, a flapping
+  threshold, and a human paging decision all sit in front of every "minutes"
+  figure above. **Automatic** failover is faster but risks **false-positive
+  cutovers** (flapping) that cause their own outage; **manual** failover avoids
+  that but adds detection-to-decision time. Design the probe and the trigger, not
+  just the target.
+
+- **Failover is only half the runbook — plan failback.** Every scenario covers
+  cutting *over*; returning to the primary is often harder and riskier: you must
+  reverse replication, reconcile writes that landed on the DR side, and re-sync
+  without a second outage. An untested failback can strand you in the DR region
+  or lose data on the way home.
+
+- **Correlated failure — "multi-region" can share a single fate.** Two regions
+  are only independent if everything *around* them is. A shared DNS provider,
+  identity plane (Entra ID / IAM), TLS/cert authority, container registry,
+  secrets store, or **management / control plane** is a single dependency that can
+  take down both sides at once. In particular, even on VMs a **regional
+  control-plane outage** can block scaling, deploys, and failover *while your
+  instances keep serving traffic* — the same failure mode the
+  [PaaS companion](paas-failover-methods.md) calls out. Map your shared
+  dependencies before you trust your region count.
+
+- **Split-brain — who decides to promote?** Automatic promotion (#4–#6) can
+  **double-promote** under a network partition, leaving two writers that silently
+  diverge. Guard promotion with a **quorum / witness / tiebreaker**, and prefer an
+  **odd number** of fault domains so a majority always exists.
+
+- **DNS TTL vs. real RTO.** Scenarios that fail over by **re-pointing DNS** (#2,
+  #3, #8, #11) inherit client- and resolver-cached TTLs: the true RTO is your
+  promotion time *plus* the record TTL (plus resolvers that ignore it). Keep
+  failover-record TTLs low (30–60 s), or use a **global anycast load balancer /
+  health-based routing** so cutover doesn't wait on DNS propagation.
+
+- **Test it, or it's a hope, not an SLO.** An untested DR path decays silently —
+  capacity drifts, credentials expire, the runbook goes stale. Run scheduled
+  **failover drills / game days**, exercise **failback** as well as failover, and
+  test the **control plane** (can you actually *trigger* a failover during a
+  regional management outage?), not just the data plane. Feed the measured
+  detection-to-recovery time back into the RTO numbers above.

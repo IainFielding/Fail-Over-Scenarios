@@ -365,3 +365,59 @@ scenario. **Cell-based (#8) is an overlay** you can add to any tier.
   blast radius of gray failures and bad deploys.
 - A topology's SLO is only as good as its **weakest serial tier** and your
   **tested runbooks**: an untested failover group is an aspiration, not an SLO.
+
+---
+
+## Cross-cutting concerns (what the ladder doesn't show)
+
+The ladder scales resilience to **infrastructure** loss, and the platform owns
+most of the mechanism. These concerns cut across every rung and are the parts
+**you still own** — they decide whether the SLO you *enabled* is the SLO you get.
+
+- **DR is not backup — the platform replicates your mistakes too.** Auto-failover
+  groups, global tables, and geo-replication faithfully copy a `DROP TABLE`, a
+  ransomware encryption, or a bad-deploy mutation to every region in seconds.
+  Managed replication protects against **infrastructure** loss; only
+  **point-in-time restore, immutable / soft-delete backups, or a retained copy**
+  protect against **logical** loss. PITR (#1) isn't the bottom rung you leave
+  behind — it's an **orthogonal protection you keep at every tier**. The more
+  automatic your replication, the faster corruption spreads.
+
+- **Detection and triggering still cap RTO.** Even with platform-managed failover,
+  the RTO clock starts at **detection**. Front Door health-probe intervals,
+  failover-group grace periods, and any human confirmation sit in front of every
+  "seconds to minutes" above. Auto-failover is faster but can **flap**; a
+  conservative grace period is safer but adds minutes. Tune the probe and the
+  failover policy, don't just enable them.
+
+- **Failover is half the runbook — plan failback.** After the primary region
+  returns, a failover group must be **re-established in the original direction**
+  and any diverged writes reconciled. The platform automates promotion, not the
+  decision to fail *back* or the data reconciliation. Rehearse the return trip.
+
+- **Correlated failure — managed doesn't mean independent.** Your two regions
+  share a **control plane** (a regional management-plane outage can block scaling,
+  deploys, and failover while instances still serve — see
+  [What changes](#what-changes-when-you-move-from-vm-to-paas)), plus a shared
+  identity plane (Entra ID / IAM), DNS, and often a single Front Door /
+  Traffic Manager profile. A dependency that lives in one place is a single fault
+  domain no SKU tier fixes. Map them.
+
+- **Split-brain — the platform's promotion needs a tiebreaker too.** A failover
+  group promoted during a network partition can leave two writers. Managed
+  services mitigate this, but understand your service's **quorum / arbitration**
+  model before you trust automatic promotion, and prefer configurations with a
+  clear majority.
+
+- **DNS TTL vs. real RTO.** The PaaS stacks route through **Front Door / global
+  anycast**, which cuts over without waiting on DNS propagation — one reason their
+  RTO is tighter than the VM equivalents. But front them with **Traffic Manager
+  (DNS-based)** instead and real RTO becomes promotion time **plus the record
+  TTL** (plus resolvers that ignore it). Prefer anycast routing, or keep TTLs low.
+
+- **Test it — enablement is not resilience.** A failover group you never
+  triggered, a zone-redundant SKU you enabled but never lost a zone under, a DR
+  region without reserved quota: all are aspirations until exercised. Run
+  scheduled **failover drills / game days**, test **failback**, and specifically
+  test the **control plane** (can you fail over during a regional management
+  outage?), not just the data plane.
