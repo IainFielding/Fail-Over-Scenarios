@@ -577,93 +577,129 @@ def s14_cell():
 
 
 def flowchart():
-    """Decision tree for choosing one of the topologies above."""
+    """Decision tree for choosing one of the topologies above.
+
+    The graph is a strict binary-ish tree, so we lay it out automatically as a
+    left-to-right tree: x = depth * column pitch, and y is driven by the leaf
+    order (each leaf gets its own row; every parent sits at the vertical midpoint
+    of its children). Because the tree is planar and each edge spans exactly one
+    column, no edge ever crosses a node or another edge.
+    """
     d = Diagram("15-decision-flowchart")
-    d.text(0, 0, 1900, 30,
+    d.text(0, 0, 2600, 30,
            "Choosing a 3-tier resilience topology - decision flow",
            size=16, bold=True)
-
-    def X(depth):
-        return 50 + depth * 270
 
     # SLO heat colours for outcomes (least -> most resilient)
     RED, ORANGE, YEL, GRN = "#F8CECC", "#FFE6CC", "#FFF2CC", "#D5E8D4"
     RS, OS, YS, GS = "#B85450", "#D79B00", "#D6B656", "#82B366"
-
-    # --- decision nodes ---
-    start = d.pnode(X(0), 360, "Start", w=150, h=50, fill="#E1D5E7",
-                    stroke="#9673A6", arc=40)
-    q1 = d.diamond(X(1), 350, "Survive an entire<br>cloud-provider outage?")
-    q5 = d.diamond(X(2), 150, "Survive a full<br>region outage?")
-    q2 = d.diamond(X(2), 620, "Need continuous service,<br>"
-                              "no failover (active/active)?")
-    q9 = d.diamond(X(3), 60, "Need automatic recovery<br>"
-                             "from instance / zone failure?")
-    q6 = d.diamond(X(3), 300, "Need zero-downtime regional<br>"
-                              "failover (active/active)?")
-    q3 = d.diamond(X(3), 760, "More than one<br>region per cloud?")
-    q10 = d.diamond(X(4), 110, "Spread compute across<br>multiple AZs?")
-    qw = d.diamond(X(4), 290, "Need multi-region writes<br>(multi-master)?")
-    q7 = d.diamond(X(4), 460, "Is the primary already<br>3-AZ active?")
-    q8 = d.diamond(X(5), 460, "Need automatic local<br>HA (no data loss) too?")
-    qdr = d.diamond(X(6), 460, "How fast must regional<br>recovery be?")
-    qcell = d.diamond(X(4), 870, "Also need per-tenant<br>"
-                                 "blast-radius isolation?")
-
-    # --- outcome nodes (SLO heat-coloured) ---
-    o1 = d.pnode(X(4), 20, "1 · Active<br>SLO ~99.9%", fill=RED, stroke=RS)
-    o7 = d.pnode(X(5), 40, "7 · 3-AZ Active<br>SLO ~99.99%", fill=YEL, stroke=YS)
-    o5 = d.pnode(X(5), 160, "5 · Active + Passive<br>SLO ~99.95%",
-                 fill=ORANGE, stroke=OS)
-    o10 = d.pnode(X(5), 250, "10 · Multi-region A/A<br>SLO ~99.99–99.999%",
-                  fill=GRN, stroke=GS)
-    o9 = d.pnode(X(5), 355, "9 · Global read replicas<br>SLO ~99.99% (reads)",
-                 fill=YEL, stroke=YS)
-    o8 = d.pnode(X(5), 560, "8 · 3-AZ + DR region<br>SLO ~99.99%",
-                 fill=YEL, stroke=YS)
-    o6 = d.pnode(X(6), 330, "6 · Active + Passive + DR<br>SLO ~99.95%",
-                 fill=ORANGE, stroke=OS)
-    o2 = d.pnode(X(7), 360, "2 · Pilot Light<br>SLO ~99.9%", fill=RED, stroke=RS)
-    o3 = d.pnode(X(7), 450, "3 · Warm Standby<br>SLO ~99.9%",
-                 fill=RED, stroke=RS)
-    o4 = d.pnode(X(7), 540, "4 · Hot Standby (auto)<br>SLO ~99.95%",
-                 fill=ORANGE, stroke=OS)
-    o11 = d.pnode(X(4), 620, "11 · 3-AZ + DR in AWS<br>SLO ~99.99%",
-                  fill=YEL, stroke=YS)
-    o12 = d.pnode(X(4), 760, "12 · Azure + AWS A/A<br>SLO ~99.999%",
-                  fill=GRN, stroke=GS)
-    o13 = d.pnode(X(5), 810, "13 · Multi-cloud A/A<br>SLO ~99.999%+",
-                  fill=GRN, stroke=GS)
-    o14 = d.pnode(X(5), 915, "14 · Cell-based<br>SLO ~99.999%+ (isolated)",
-                  fill=GRN, stroke=GS)
-
     YES, NO = "#82B366", "#999999"
-    d.edge(start, q1)
-    d.edge(q1, q5, "No", color=NO)
-    d.edge(q1, q2, "Yes", color=YES)
-    d.edge(q5, q9, "No", color=NO)
-    d.edge(q5, q6, "Yes", color=YES)
-    d.edge(q9, o1, "No", color=NO)
-    d.edge(q9, q10, "Yes", color=YES)
-    d.edge(q10, o7, "Yes", color=YES)
-    d.edge(q10, o5, "No", color=NO)
-    d.edge(q6, qw, "Yes", color=YES)
-    d.edge(q6, q7, "No", color=NO)
-    d.edge(qw, o10, "Yes", color=YES)
-    d.edge(qw, o9, "No", color=NO)
-    d.edge(q7, o8, "Yes", color=YES)
-    d.edge(q7, q8, "No", color=NO)
-    d.edge(q8, o6, "Yes", color=YES)
-    d.edge(q8, qdr, "No", color=NO)
-    d.edge(qdr, o2, "Slow / cheap", color=NO)
-    d.edge(qdr, o3, "Warm", color=NO)
-    d.edge(qdr, o4, "Auto / fast", color=YES)
-    d.edge(q2, o11, "No", color=NO)
-    d.edge(q2, q3, "Yes", color=YES)
-    d.edge(q3, o12, "No", color=NO)
-    d.edge(q3, qcell, "Yes", color=YES)
-    d.edge(qcell, o13, "No", color=NO)
-    d.edge(qcell, o14, "Yes", color=YES)
+
+    # --- decision nodes (diamonds) ---
+    decisions = {
+        "q1": "Survive an entire<br>cloud-provider outage?",
+        "q5": "Survive a full<br>region outage?",
+        "q2": "Need continuous service,<br>no failover (active/active)?",
+        "q9": "Need automatic recovery<br>from instance / zone failure?",
+        "q6": "Need zero-downtime regional<br>failover (active/active)?",
+        "q3": "More than one<br>region per cloud?",
+        "q10": "Spread compute across<br>multiple AZs?",
+        "qw": "Need multi-region writes<br>(multi-master)?",
+        "q7": "Is the primary already<br>3-AZ active?",
+        "qcell": "Also need per-tenant<br>blast-radius isolation?",
+        "q8": "Need automatic local<br>HA (no data loss) too?",
+        "qdr": "How fast must regional<br>recovery be?",
+    }
+
+    # --- outcome nodes: id -> (label, fill, stroke) ---
+    outcomes = {
+        "o1": ("1 · Active<br>SLO ~99.9%", RED, RS),
+        "o7": ("7 · 3-AZ Active<br>SLO ~99.99%", YEL, YS),
+        "o5": ("5 · Active + Passive<br>SLO ~99.95%", ORANGE, OS),
+        "o10": ("10 · Multi-region A/A<br>SLO ~99.99–99.999%", GRN, GS),
+        "o9": ("9 · Global read replicas<br>SLO ~99.99% (reads)", YEL, YS),
+        "o8": ("8 · 3-AZ + DR region<br>SLO ~99.99%", YEL, YS),
+        "o6": ("6 · Active + Passive + DR<br>SLO ~99.95%", ORANGE, OS),
+        "o2": ("2 · Pilot Light<br>SLO ~99.9%", RED, RS),
+        "o3": ("3 · Warm Standby<br>SLO ~99.9%", RED, RS),
+        "o4": ("4 · Hot Standby (auto)<br>SLO ~99.95%", ORANGE, OS),
+        "o11": ("11 · 3-AZ + DR in AWS<br>SLO ~99.99%", YEL, YS),
+        "o12": ("12 · Azure + AWS A/A<br>SLO ~99.999%", GRN, GS),
+        "o13": ("13 · Multi-cloud A/A<br>SLO ~99.999%+", GRN, GS),
+        "o14": ("14 · Cell-based<br>SLO ~99.999%+ (isolated)", GRN, GS),
+    }
+
+    # --- tree: parent -> [(child, edge label, edge colour)] (top-to-bottom) ---
+    # The order of children here fixes the top-to-bottom order of the diagram.
+    children = {
+        "start": [("q1", "", None)],
+        "q1": [("q5", "No", NO), ("q2", "Yes", YES)],
+        "q5": [("q9", "No", NO), ("q6", "Yes", YES)],
+        "q9": [("o1", "No", NO), ("q10", "Yes", YES)],
+        "q10": [("o7", "Yes", YES), ("o5", "No", NO)],
+        "q6": [("qw", "Yes", YES), ("q7", "No", NO)],
+        "qw": [("o10", "Yes", YES), ("o9", "No", NO)],
+        "q7": [("o8", "Yes", YES), ("q8", "No", NO)],
+        "q8": [("o6", "Yes", YES), ("qdr", "No", NO)],
+        "qdr": [("o2", "Slow / cheap", NO), ("o3", "Warm", NO),
+                ("o4", "Auto / fast", YES)],
+        "q2": [("o11", "No", NO), ("q3", "Yes", YES)],
+        "q3": [("o12", "No", NO), ("qcell", "Yes", YES)],
+        "qcell": [("o13", "No", NO), ("o14", "Yes", YES)],
+    }
+
+    # --- compute depth (column) and a y-centre per node (row) ---
+    depth = {}
+
+    def set_depth(node, dep):
+        depth[node] = dep
+        for c, _, _ in children.get(node, []):
+            set_depth(c, dep + 1)
+
+    set_depth("start", 0)
+
+    ycenter = {}
+    counter = [0]
+
+    def assign(node):
+        kids = children.get(node, [])
+        if not kids:                       # leaf -> its own row
+            ycenter[node] = counter[0]
+            counter[0] += 1
+            return ycenter[node]
+        ys = [assign(c) for c, _, _ in kids]
+        ycenter[node] = sum(ys) / len(ys)  # parent sits between its children
+        return ycenter[node]
+
+    assign("start")
+
+    LEFT, TOP, HGAP, VGAP = 120, 80, 320, 125
+
+    def place(node, w, h):
+        cx = LEFT + depth[node] * HGAP
+        cy = TOP + ycenter[node] * VGAP
+        return int(round(cx - w / 2)), int(round(cy - h / 2))
+
+    # --- create nodes ---
+    nid = {}
+    sx, sy = place("start", 150, 50)
+    nid["start"] = d.pnode(sx, sy, "Start", w=150, h=50, fill="#E1D5E7",
+                           stroke="#9673A6", arc=40)
+    for node, label in decisions.items():
+        x, y = place(node, 200, 110)
+        nid[node] = d.diamond(x, y, label)
+    for node, (label, fill, stroke) in outcomes.items():
+        x, y = place(node, 215, 70)
+        nid[node] = d.pnode(x, y, label, fill=fill, stroke=stroke)
+
+    # --- create edges (forced left->right for clean tree routing) ---
+    for parent, kids in children.items():
+        for child, lbl, color in kids:
+            kwargs = {"exit": (1, 0.5), "entry": (0, 0.5)}
+            if color:
+                kwargs["color"] = color
+            d.edge(nid[parent], nid[child], lbl, **kwargs)
+
     d.save("15-decision-flowchart.drawio")
 
 
